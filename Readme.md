@@ -1,1 +1,2 @@
-print "hello pertama"
+# Selamat datang
+
