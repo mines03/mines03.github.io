@@ -63,48 +63,41 @@ function renderInline(s) {
   // 1. Escape HTML dulu untuk keamanan
   s = escapeHtml(s);
 
-  // 2. Render YouTube
-  s = s.replace(/\[\[youtube:([^\]]+)\]\[([^\]]+)\]\]/g, function(_, videoId, text) {
-    return '<div class="youtube-embed"><iframe src="https://www.youtube.com/embed/' + videoId + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>';
-  });
-
-  // 3. Render Audio
-  s = s.replace(/\[\[audio:([^\]]+)\]\[([^\]]+)\]\]/g, function(_, url, text) {
-    return '<div class="audio-player"><audio controls style="width:100%;"><source src="' + url + '" type="audio/mp4"><source src="' + url + '" type="audio/mpeg">Browser tidak mendukung. <a href="' + url + '">Unduh</a>.</audio></div>';
-  });
-
-  // 4. Render Gambar dengan Teks: [[URL][Teks]]
-  s = s.replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, function(_, u, t) {
-    const cleanUrl = u.trim();
+  // 2. Handle [[URL][Teks]]
+  s = s.replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, function(match, url, text) {
+    var cleanUrl = url.trim();
     if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(cleanUrl)) {
-      return '<img src="' + cleanUrl + '" alt="' + t + '" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
+      return '<img src="' + cleanUrl + '" alt="' + text + '" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
     }
-    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + t + '</a>';
+    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + text + '</a>';
   });
 
-  // 5. Render Gambar TANPA Teks: [[URL]]
-  s = s.replace(/\[\[([^\]]+)\]\]/g, function(_, u) {
-    const cleanUrl = u.trim();
+  // 3. Handle [[URL]]
+  s = s.replace(/\[\[([^\]]+)\]\]/g, function(match, url) {
+    var cleanUrl = url.trim();
     if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(cleanUrl)) {
-      // Tambahkan console.log untuk memastikan ini berjalan
-      console.log("Gambar terdeteksi:", cleanUrl);
+      // Console log ini akan membantu kita memastikan kode ini berjalan
+      console.log("Gambar berhasil diproses:", cleanUrl);
       return '<img src="' + cleanUrl + '" alt="image" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
     }
     return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + cleanUrl + '</a>';
   });
 
-  // 6. Kode inline
+  // 4. YouTube & Audio (Tetap menggunakan template literal karena lebih pendek, biasanya aman)
+  s = s.replace(/\[\[youtube:([^\]]+)\]\[([^\]]+)\]\]/g, (_, videoId, text) => `<div class="youtube-embed"><iframe src="https://www.youtube.com/embed/${videoId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`);
+  s = s.replace(/\[\[audio:([^\]]+)\]\[([^\]]+)\]\]/g, (_, url, text) => `<div class="audio-player"><audio controls style="width:100%;"><source src="${url}" type="audio/mp4"><source src="${url}" type="audio/mpeg">Browser tidak mendukung. <a href="${url}">Unduh</a>.</audio></div>`);
+
+  // 5. Kode inline
   s = s.replace(/~([^~\n]+)~/g, '<code>$1</code>');
   s = s.replace(/=([^=\n]+)=/g, '<code>$1</code>');
 
-  // 7. Format teks Org-mode
+  // 6. Format teks Org-mode
   s = s.replace(/(^|[\s('">])\*([^*\n]+?)\*(?=$|[\s.,;:!?)'"])/g, '$1<strong>$2</strong>');
   s = s.replace(/(^|[\s('">])\/([^\/\n]+?)\/(?=$|[\s.,;:!?)'"])/g, '$1<em>$2</em>');
   s = s.replace(/(^|[\s('">])_([^_\n]+?)_(?=$|[\s.,;:!?)'"])/g, '$1<u>$2</u>');
 
   return s;
 }
-
 function orgToHtml(src) {
   const out = [];
   let para = [], list = null, code = null, quote = null, table = null, drawer = false;
