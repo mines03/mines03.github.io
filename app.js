@@ -1,10 +1,6 @@
 /* ================= KONFIG ================= */
-// GANTI URL INI DENGAN URL YANG ANDA DAPATKAN DARI LANGKAH DI ATAS
-// (URL YANG BERHASIL MENDOWNLOAD FILE SAAT DITEMPEL DI BROWSER)
-const TARGET_URL = 'https://artikel-proxy.extra03-mine.workers.dev/'; 
-// ATAU JIKA SHARE FOLDER: 'https://mydrive.id/s/YZmpJtJnAxPbfAW/download?path=%2F&files=artikel.org'
-
-const SITE_TITLE = 'Blog Saya';
+const TARGET_URL = 'https://artikel-proxy.extra03-mine.workers.dev/';
+const SITE_TITLE = 'Blog Udin';
 
 /* ================= UTIL ================= */
 function escapeHtml(s) {
@@ -62,18 +58,50 @@ function parseOrg(text) {
   return articles;
 }
 
-/* ================= ORG -> HTML ================= */
+/* ================= ORG -> HTML (BULLETPROOF) ================= */
 function renderInline(s) {
+  // 1. Escape HTML dulu untuk keamanan
   s = escapeHtml(s);
-  s = s.replace(/\[\[youtube:([^\]]+)\]\[([^\]]+)\]\]/g, (_, videoId, text) => `<div class="youtube-embed"><iframe src="https://www.youtube.com/embed/${videoId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`);
-  s = s.replace(/\[\[audio:([^\]]+)\]\[([^\]]+)\]\]/g, (_, url, text) => `<div class="audio-player"><audio controls style="width:100%;"><source src="${url}" type="audio/mp4"><source src="${url}" type="audio/mpeg">Browser tidak mendukung. <a href="${url}">Unduh</a>.</audio></div>`);
-  s = s.replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, (_, u, t) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u) ? `<img src="${u}" alt="${t}" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">` : `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
-  s = s.replace(/\[\[([^\]]+)\]\]/g, (_, u) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u) ? `<img src="${u}" alt="image" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">` : `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+
+  // 2. Render YouTube
+  s = s.replace(/\[\[youtube:([^\]]+)\]\[([^\]]+)\]\]/g, function(_, videoId, text) {
+    return '<div class="youtube-embed"><iframe src="https://www.youtube.com/embed/' + videoId + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>';
+  });
+
+  // 3. Render Audio
+  s = s.replace(/\[\[audio:([^\]]+)\]\[([^\]]+)\]\]/g, function(_, url, text) {
+    return '<div class="audio-player"><audio controls style="width:100%;"><source src="' + url + '" type="audio/mp4"><source src="' + url + '" type="audio/mpeg">Browser tidak mendukung. <a href="' + url + '">Unduh</a>.</audio></div>';
+  });
+
+  // 4. Render Gambar dengan Teks: [[URL][Teks]]
+  s = s.replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, function(_, u, t) {
+    const cleanUrl = u.trim();
+    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(cleanUrl)) {
+      return '<img src="' + cleanUrl + '" alt="' + t + '" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
+    }
+    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + t + '</a>';
+  });
+
+  // 5. Render Gambar TANPA Teks: [[URL]]
+  s = s.replace(/\[\[([^\]]+)\]\]/g, function(_, u) {
+    const cleanUrl = u.trim();
+    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(cleanUrl)) {
+      // Tambahkan console.log untuk memastikan ini berjalan
+      console.log("Gambar terdeteksi:", cleanUrl);
+      return '<img src="' + cleanUrl + '" alt="image" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
+    }
+    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + cleanUrl + '</a>';
+  });
+
+  // 6. Kode inline
   s = s.replace(/~([^~\n]+)~/g, '<code>$1</code>');
   s = s.replace(/=([^=\n]+)=/g, '<code>$1</code>');
+
+  // 7. Format teks Org-mode
   s = s.replace(/(^|[\s('">])\*([^*\n]+?)\*(?=$|[\s.,;:!?)'"])/g, '$1<strong>$2</strong>');
   s = s.replace(/(^|[\s('">])\/([^\/\n]+?)\/(?=$|[\s.,;:!?)'"])/g, '$1<em>$2</em>');
   s = s.replace(/(^|[\s('">])_([^_\n]+?)_(?=$|[\s.,;:!?)'"])/g, '$1<u>$2</u>');
+
   return s;
 }
 
@@ -86,7 +114,7 @@ function orgToHtml(src) {
     if (!table) return;
     const rows = table.filter(r => !/^\s*\|[-+|\s]*\|\s*$/.test(r)).map(r => r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim()));
     const head = rows.shift() || [];
-    out.push('<table><tr>' + head.map(c => `<th>${renderInline(c)}</th>`).join('') + '</tr>' + rows.map(r => '<tr>' + r.map(c => `<td>${renderInline(c)}</td>`).join('') + '</tr>').join('') + '</table>');
+    out.push('<table><tr>' + head.map(c => '<th>' + renderInline(c) + '</th>').join('') + '</tr>' + rows.map(r => '<tr>' + r.map(c => '<td>' + renderInline(c) + '</td>').join('') + '</tr>').join('') + '</table>');
     table = null;
   };
 
@@ -112,7 +140,7 @@ function orgToHtml(src) {
     if ((m = line.match(/^(\*+)\s+(.+)$/))) {
       closePara(); closeList(); closeTable();
       const lvl = Math.min(m[1].length, 6);
-      out.push(`<h${lvl}>${renderInline(m[2].replace(/\s+:[\w@#:]+:\s*$/, '').trim())}</h${lvl}>`);
+      out.push('<h' + lvl + '>' + renderInline(m[2].replace(/\s+:[\w@#:]+:\s*$/, '').trim()) + '</h' + lvl + '>');
       continue;
     }
     if ((m = line.match(/^\s*[-+]\s+(.*)$/)) || (m = line.match(/^\s+\*\s+(.*)$/))) {
@@ -153,35 +181,24 @@ function getLayouts() {
 
 async function load() {
   const loadingEl = document.getElementById('loading');
-  
   try {
-    console.log("Mengambil data dari:", TARGET_URL);
     const res = await fetch(TARGET_URL);
-    
-    if (!res.ok) {
-      throw new Error(`HTTP Error: ${res.status} ${res.statusText}`);
-    }
-
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const rawText = await res.text();
-    
     if (rawText.trim().startsWith('<!DOCTYPE') || rawText.toLowerCase().includes('<html')) {
-       showError("URL mengembalikan halaman web, bukan file teks. Pastikan URL yang Anda masukkan adalah link download langsung.");
+       showError("URL mengembalikan halaman web, bukan file teks.");
        return;
     }
-
     const cleanText = rawText.replace(/^\uFEFF/, '');
     ARTICLES = parseOrg(cleanText).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    
     if (ARTICLES.length === 0) {
-      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi. Pastikan format file .org benar (dimulai dengan <code>* Judul</code>).");
+      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi.");
       return;
     }
-    
   } catch (e) {
-    showError(`Gagal memuat: ${e.message}<br><br>Pastikan URL di baris 4 app.js adalah link yang berhasil mendownload file saat dibuka di browser.`);
+    showError('Gagal memuat: ' + e.message);
     return;
   }
-
   if (loadingEl) loadingEl.remove();
   route();
 }
@@ -189,10 +206,7 @@ async function load() {
 function showError(msg) {
   const loadingEl = document.getElementById('loading');
   if (loadingEl) {
-    loadingEl.innerHTML = `<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:1.5rem; border-radius:8px; text-align:left; max-width:600px; margin:2rem auto;">
-      <p style="font-weight:bold; margin-bottom:0.5rem;">❌ Gagal memuat artikel</p>
-      <p style="font-size:0.9rem; line-height:1.6;">${msg}</p>
-    </div>`;
+    loadingEl.innerHTML = '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:1.5rem; border-radius:8px; text-align:left; max-width:600px; margin:2rem auto;"><p style="font-weight:bold; margin-bottom:0.5rem;">❌ Gagal memuat artikel</p><p style="font-size:0.9rem; line-height:1.6;">' + msg + '</p></div>';
   }
 }
 
@@ -201,10 +215,7 @@ function renderList() {
   const layouts = getLayouts();
   const layoutLabels = { 'all': '📚 Semua', 'post': '📝 Blog', 'book': '📖 Buku' };
   
-  app.innerHTML = `
-    <div class="tabs">${layouts.map(l => `<button class="tab-btn ${currentLayout === l ? 'active' : ''}" data-layout="${l}">${layoutLabels[l] || l}</button>`).join('')}</div>
-    <input id="q" type="search" placeholder="Cari artikel…" value="${escapeHtml(currentFilter)}">
-    <div id="list"></div>`;
+  app.innerHTML = '<div class="tabs">' + layouts.map(l => '<button class="tab-btn ' + (currentLayout === l ? 'active' : '') + '" data-layout="' + l + '">' + (layoutLabels[l] || l) + '</button>').join('') + '</div><input id="q" type="search" placeholder="Cari artikel…" value="' + escapeHtml(currentFilter) + '"><div id="list"></div>';
     
   const listEl = document.getElementById('list');
   const draw = () => {
@@ -214,12 +225,7 @@ function renderList() {
       if (!q) return true;
       return a.title.toLowerCase().includes(q) || a.raw.toLowerCase().includes(q) || a.tags.some(t => t.toLowerCase().includes(q));
     });
-    listEl.innerHTML = items.length ? items.map(a => `
-      <div class="item">
-        <h2><a href="#/artikel/${encodeURIComponent(a.slug)}">${escapeHtml(a.title)}</a></h2>
-        <div class="meta">${a.date || 'tanpa tanggal'} <span class="layout-badge">${a.layout}</span> ${a.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>
-        <div class="excerpt">${escapeHtml(excerpt(a.raw))}</div>
-      </div>`).join('') : '<p>Tidak ada hasil.</p>';
+    listEl.innerHTML = items.length ? items.map(a => '<div class="item"><h2><a href="#/artikel/' + encodeURIComponent(a.slug) + '">' + escapeHtml(a.title) + '</a></h2><div class="meta">' + (a.date || 'tanpa tanggal') + ' <span class="layout-badge">' + a.layout + '</span> ' + a.tags.map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('') + '</div><div class="excerpt">' + escapeHtml(excerpt(a.raw)) + '</div></div>').join('') : '<p>Tidak ada hasil.</p>';
   };
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -239,14 +245,7 @@ function renderArticle(slug) {
   if (!a) { app.innerHTML = '<p>Artikel tidak ditemukan. <a href="#/">← Kembali</a></p>'; return; }
   document.title = a.title + ' — ' + SITE_TITLE;
   const d = a.date ? new Date(a.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-  app.innerHTML = `
-    <article>
-      <div class="meta"><a href="#/">← Kembali</a> · ${d} <span class="layout-badge">${a.layout}</span></div>
-      <h1>${escapeHtml(a.title)}</h1>
-      <div style="margin-bottom:1.5rem;">${a.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>
-      <div class="content">${orgToHtml(a.raw)}</div>
-      <hr><a href="#/">← Kembali ke daftar artikel</a>
-    </article>`;
+  app.innerHTML = '<article><div class="meta"><a href="#/">← Kembali</a> · ' + d + ' <span class="layout-badge">' + a.layout + '</span></div><h1>' + escapeHtml(a.title) + '</h1><div style="margin-bottom:1.5rem;">' + a.tags.map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('') + '</div><div class="content">' + orgToHtml(a.raw) + '</div><hr><a href="#/">← Kembali ke daftar artikel</a></article>';
   window.scrollTo(0, 0);
 }
 
