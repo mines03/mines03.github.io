@@ -4,7 +4,7 @@
 const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org'; 
 // ATAU JIKA SHARE FOLDER: 'https://mydrive.id/s/YZmpJtJnAxPbfAW/download?path=%2F&files=artikel.org'
 
-const SITE_TITLE = 'Blog Udin';
+const SITE_TITLE = 'Blog Saya';
 
 /* ================= UTIL ================= */
 function escapeHtml(s) {
