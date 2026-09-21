@@ -1,15 +1,14 @@
 /* ================= KONFIG ================= */
-// URL asli Anda. (Jika ini share file tunggal, coba juga tanpa '/artikel.org' di akhir, cukup '/download')
-const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org';
+// PILIH SALAH SATU URL DI BAWAH INI SESUAI JENIS SHARE NEXTCLOUD ANDA:
 
-// Daftar strategi pengambilan data (Direct -> Proxy 1 -> Proxy 2)
-const FETCH_STRATEGIES = [
-  TARGET_URL, // 1. Coba langsung dulu (paling cepat jika CORS terbuka)
-  `https://api.allorigins.win/raw?url=${encodeURIComponent(TARGET_URL)}`, // 2. Proxy AllOrigins (sangat stabil untuk teks)
-  `https://corsproxy.io/?${encodeURIComponent(TARGET_URL)}` // 3. Proxy CorsProxy.io (fallback terakhir)
-];
+// OPSI A: Jika Anda melakukan "Share Folder" (paling umum & paling stabil)
+//const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download?path=/&files=artikel.org';
+const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org'
 
-const SITE_TITLE = 'Blog Saya';
+// OPSI B: Jika Anda melakukan "Share File" (langsung klik share pada file artikel.org)
+// const TARGET_URL = 'https://mydrive.id/s/YZmpJtJnAxPbfAW/download';
+
+const SITE_TITLE = 'Blog Udin';
 
 /* ================= UTIL ================= */
 function escapeHtml(s) {
@@ -158,44 +157,19 @@ function getLayouts() {
 
 async function load() {
   const loadingEl = document.getElementById('loading');
-  let res = null;
-  let lastError = 'Unknown error';
-
-  // 🔁 LOOPING STRATEGI: Coba satu per satu sampai ada yang berhasil
-  for (const url of FETCH_STRATEGIES) {
-    try {
-      console.log(`🔄 Mencoba mengambil dari: ${url.substring(0, 50)}...`);
-      res = await fetch(url);
-      if (res.ok) {
-        console.log("✅ Berhasil mengambil data!");
-        break; // Keluar dari loop jika sukses (HTTP 200)
-      } else {
-        lastError = `HTTP ${res.status} ${res.statusText}`;
-        console.warn(`⚠️ Gagal (${res.status}), mencoba fallback berikutnya...`);
-      }
-    } catch (e) {
-      lastError = e.message;
-      console.warn(`⚠️ Error jaringan, mencoba fallback berikutnya...`);
-    }
-  }
-
-  // Jika semua strategi gagal
-  if (!res || !res.ok) {
-    showError(`Gagal mengambil data setelah mencoba beberapa metode.<br>
-    Error terakhir: <strong>${lastError}</strong><br><br>
-    <strong>Penyebab paling mungkin:</strong><br>
-    1. Server Nextcloud Anda memiliki firewall (seperti Cloudflare/Fail2Ban) yang memblokir semua proxy.<br>
-    2. Link share memerlukan password atau sudah kedaluwarsa.<br>
-    3. Coba ubah URL di baris 3 menjadi: <code>https://mydrive.id/s/YZmpJtJnAxPbfAW/download</code> (tanpa /artikel.org)`);
-    return;
-  }
-
+  
   try {
+    console.log("Mengambil data dari:", TARGET_URL);
+    const res = await fetch(TARGET_URL);
+    
+    if (!res.ok) {
+      throw new Error(`HTTP Error: ${res.status} ${res.statusText}`);
+    }
+
     const rawText = await res.text();
     
-    // Validasi: Pastikan ini file teks, bukan halaman HTML Nextcloud
     if (rawText.trim().startsWith('<!DOCTYPE') || rawText.toLowerCase().includes('<html')) {
-       showError("URL mengembalikan halaman web login/share, bukan file teks.<br>Pastikan link share publik Anda benar dan tidak memerlukan password.");
+       showError("URL mengembalikan halaman web, bukan file teks. Pastikan Anda menggunakan format URL yang benar untuk Share Folder atau Share File.");
        return;
     }
 
@@ -203,12 +177,12 @@ async function load() {
     ARTICLES = parseOrg(cleanText).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     
     if (ARTICLES.length === 0) {
-      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi.<br>Pastikan file .org Anda memiliki format yang benar (dimulai dengan <code>* Judul Artikel</code>).");
+      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi. Pastikan format file .org benar (dimulai dengan <code>* Judul</code>).");
       return;
     }
     
   } catch (e) {
-    showError("Gagal memproses file: " + e.message);
+    showError(`Gagal memuat: ${e.message}<br><br>Pastikan: <br>1. File 'artikel.org' ada di folder/file share Nextcloud.<br>2. Link share tidak memerlukan password.`);
     return;
   }
 
