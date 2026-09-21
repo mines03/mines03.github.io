@@ -1,12 +1,8 @@
 /* ================= KONFIG ================= */
-// PILIH SALAH SATU URL DI BAWAH INI SESUAI JENIS SHARE NEXTCLOUD ANDA:
-
-// OPSI A: Jika Anda melakukan "Share Folder" (paling umum & paling stabil)
-//const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download?path=/&files=artikel.org';
-const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org'
-
-// OPSI B: Jika Anda melakukan "Share File" (langsung klik share pada file artikel.org)
-// const TARGET_URL = 'https://mydrive.id/s/YZmpJtJnAxPbfAW/download';
+// GANTI URL INI DENGAN URL YANG ANDA DAPATKAN DARI LANGKAH DI ATAS
+// (URL YANG BERHASIL MENDOWNLOAD FILE SAAT DITEMPEL DI BROWSER)
+const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org'; 
+// ATAU JIKA SHARE FOLDER: 'https://mydrive.id/s/YZmpJtJnAxPbfAW/download?path=%2F&files=artikel.org'
 
 const SITE_TITLE = 'Blog Udin';
 
@@ -169,7 +165,7 @@ async function load() {
     const rawText = await res.text();
     
     if (rawText.trim().startsWith('<!DOCTYPE') || rawText.toLowerCase().includes('<html')) {
-       showError("URL mengembalikan halaman web, bukan file teks. Pastikan Anda menggunakan format URL yang benar untuk Share Folder atau Share File.");
+       showError("URL mengembalikan halaman web, bukan file teks. Pastikan URL yang Anda masukkan adalah link download langsung.");
        return;
     }
 
@@ -182,7 +178,7 @@ async function load() {
     }
     
   } catch (e) {
-    showError(`Gagal memuat: ${e.message}<br><br>Pastikan: <br>1. File 'artikel.org' ada di folder/file share Nextcloud.<br>2. Link share tidak memerlukan password.`);
+    showError(`Gagal memuat: ${e.message}<br><br>Pastikan URL di baris 4 app.js adalah link yang berhasil mendownload file saat dibuka di browser.`);
     return;
   }
 
