@@ -1,252 +1,1081 @@
 /* ================= KONFIG ================= */
+
+// URL proxy Anda.
 const TARGET_URL = 'https://artikel-proxy.extra03-mine.workers.dev/';
-const SITE_TITLE = 'Blog Udin';
+const SITE_TITLE = 'Blog Saya';
+
 
 /* ================= UTIL ================= */
-function escapeHtml(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
-function slugify(s) {
-  return String(s).toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
 }
 
-function parseDate(s) {
-  if (!s) return null;
-  const m = String(s).match(/(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : null;
+function parseDate(value) {
+  if (!value) return null;
+
+  const match = String(value).match(/(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
 }
+
+function escapeAttribute(value) {
+  return escapeHtml(String(value ?? ''));
+}
+
+function isImageUrl(value) {
+  const url = String(value || '').trim();
+
+  try {
+    const parsed = new URL(url, window.location.href);
+
+    return /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|tif|tiff)$/i.test(
+      parsed.pathname
+    );
+  } catch {
+    return /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp|tif|tiff)(?:[?#].*)?$/i.test(
+      url
+    );
+  }
+}
+
+function isSafeUrl(value) {
+  const url = String(value || '').trim();
+
+  return !/^(javascript|vbscript|data):/i.test(url);
+}
+
 
 /* ================= PARSER ORG ================= */
+
 function parseOrg(text) {
   const articles = [];
-  let cur = null, buf = [], drawer = false;
 
-  const flush = () => {
-    if (cur) {
-      cur.raw = buf.join('\n').trim();
-      cur.date = parseDate(cur.props.date || cur.props.tanggal) || parseDate((cur.raw.match(/^\s*[<\[](\d{4}-\d{2}-\d{2})/) || [])[1]);
-      cur.slug = cur.props.slug || cur.props.id || slugify(cur.title);
-      cur.layout = cur.props.layout || 'post';
-      articles.push(cur);
-    }
-    buf = [];
-  };
+  let currentArticle = null;
+  let buffer = [];
+  let insideDrawer = false;
 
-  for (const line of text.split(/\r?\n/)) {
-    const m = line.match(/^(\*+)\s+(.*)$/);
-    if (m && m[1].length === 1) {
-      flush();
-      let t = m[2], tags = [];
-      const tm = t.match(/^(.*?)\s+(:[\w@#:]+:)\s*$/);
-      if (tm) { t = tm[1]; tags = tm[2].split(':').filter(Boolean); }
-      cur = { title: t.trim(), tags, props: {} };
-      continue;
-    }
-    if (!cur) continue;
-    if (/^\s*:PROPERTIES:\s*$/i.test(line)) { drawer = true; continue; }
-    if (drawer && /^\s*:END:\s*$/i.test(line)) { drawer = false; continue; }
-    if (drawer) {
-      const pm = line.match(/^\s*:([\w-]+):\s*(.*)$/);
-      if (pm) cur.props[pm[1].toLowerCase()] = pm[2].trim();
-      continue;
-    }
-    buf.push(line);
+  function flushArticle() {
+    if (!currentArticle) return;
+
+    currentArticle.raw = buffer.join('\n').trim();
+
+    const dateFromBody = (
+      currentArticle.raw.match(/^\s*[<\[](\d{4}-\d{2}-\d{2})/) || []
+    )[1];
+
+    currentArticle.date =
+      parseDate(
+        currentArticle.props.date ||
+        currentArticle.props.tanggal
+      ) ||
+      parseDate(dateFromBody);
+
+    currentArticle.slug =
+      currentArticle.props.slug ||
+      currentArticle.props.id ||
+      slugify(currentArticle.title);
+
+    currentArticle.layout =
+      currentArticle.props.layout ||
+      'post';
+
+    articles.push(currentArticle);
+
+    currentArticle = null;
+    buffer = [];
   }
-  flush();
+
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const headingMatch = line.match(/^(\*+)\s+(.*)$/);
+
+    // Hanya heading level 1 yang dianggap artikel.
+    if (headingMatch && headingMatch[1].length === 1) {
+      flushArticle();
+
+      let title = headingMatch[2].trim();
+      let tags = [];
+
+      const tagMatch = title.match(
+        /^(.*?)\s+(:[\w@#:%-]+:)\s*$/
+      );
+
+      if (tagMatch) {
+        title = tagMatch[1].trim();
+        tags = tagMatch[2]
+          .split(':')
+          .filter(Boolean);
+      }
+
+      currentArticle = {
+        title,
+        tags,
+        props: {}
+      };
+
+      continue;
+    }
+
+    if (!currentArticle) continue;
+
+    if (/^\s*:PROPERTIES:\s*$/i.test(line)) {
+      insideDrawer = true;
+      continue;
+    }
+
+    if (
+      insideDrawer &&
+      /^\s*:END:\s*$/i.test(line)
+    ) {
+      insideDrawer = false;
+      continue;
+    }
+
+    if (insideDrawer) {
+      const propertyMatch = line.match(
+        /^\s*:([\w-]+):\s*(.*)$/
+      );
+
+      if (propertyMatch) {
+        currentArticle.props[
+          propertyMatch[1].toLowerCase()
+        ] = propertyMatch[2].trim();
+      }
+
+      continue;
+    }
+
+    buffer.push(line);
+  }
+
+  flushArticle();
+
   return articles;
 }
 
-/* ================= ORG -> HTML (BULLETPROOF) ================= */
-function renderInline(s) {
-  // 1. Escape HTML dulu untuk keamanan
-  s = escapeHtml(s);
 
-  // 2. Handle [[URL][Teks]]
-  s = s.replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, function(match, url, text) {
-    var cleanUrl = url.trim();
-    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(cleanUrl)) {
-      return '<img src="' + cleanUrl + '" alt="' + text + '" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
-    }
-    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + text + '</a>';
-  });
+/* ================= ORG INLINE -> HTML ================= */
 
-  // 3. Handle [[URL]]
-  s = s.replace(/\[\[([^\]]+)\]\]/g, function(match, url) {
-    var cleanUrl = url.trim();
-    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(cleanUrl)) {
-      // Console log ini akan membantu kita memastikan kode ini berjalan
-      console.log("Gambar berhasil diproses:", cleanUrl);
-      return '<img src="' + cleanUrl + '" alt="image" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">';
-    }
-    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener">' + cleanUrl + '</a>';
-  });
+function renderInline(input) {
+  let source = String(input ?? '');
+  const protectedHtml = [];
 
-  // 4. YouTube & Audio (Tetap menggunakan template literal karena lebih pendek, biasanya aman)
-  s = s.replace(/\[\[youtube:([^\]]+)\]\[([^\]]+)\]\]/g, (_, videoId, text) => `<div class="youtube-embed"><iframe src="https://www.youtube.com/embed/${videoId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`);
-  s = s.replace(/\[\[audio:([^\]]+)\]\[([^\]]+)\]\]/g, (_, url, text) => `<div class="audio-player"><audio controls style="width:100%;"><source src="${url}" type="audio/mp4"><source src="${url}" type="audio/mpeg">Browser tidak mendukung. <a href="${url}">Unduh</a>.</audio></div>`);
-
-  // 5. Kode inline
-  s = s.replace(/~([^~\n]+)~/g, '<code>$1</code>');
-  s = s.replace(/=([^=\n]+)=/g, '<code>$1</code>');
-
-  // 6. Format teks Org-mode
-  s = s.replace(/(^|[\s('">])\*([^*\n]+?)\*(?=$|[\s.,;:!?)'"])/g, '$1<strong>$2</strong>');
-  s = s.replace(/(^|[\s('">])\/([^\/\n]+?)\/(?=$|[\s.,;:!?)'"])/g, '$1<em>$2</em>');
-  s = s.replace(/(^|[\s('">])_([^_\n]+?)_(?=$|[\s.,;:!?)'"])/g, '$1<u>$2</u>');
-
-  return s;
-}
-function orgToHtml(src) {
-  const out = [];
-  let para = [], list = null, code = null, quote = null, table = null, drawer = false;
-  const closePara = () => { if (para.length) { out.push('<p>' + para.map(renderInline).join('<br>') + '</p>'); para = []; } };
-  const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
-  const closeTable = () => {
-    if (!table) return;
-    const rows = table.filter(r => !/^\s*\|[-+|\s]*\|\s*$/.test(r)).map(r => r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim()));
-    const head = rows.shift() || [];
-    out.push('<table><tr>' + head.map(c => '<th>' + renderInline(c) + '</th>').join('') + '</tr>' + rows.map(r => '<tr>' + r.map(c => '<td>' + renderInline(c) + '</td>').join('') + '</tr>').join('') + '</table>');
-    table = null;
-  };
-
-  for (const raw of src.split('\n')) {
-    const line = raw.replace(/\s+$/, '');
-    let m;
-    if (code !== null) {
-      if (/^\s*#\+END_(SRC|EXAMPLE)\s*$/i.test(line)) { out.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>'); code = null; } 
-      else code.push(raw);
-      continue;
-    }
-    if (/^\s*#\+BEGIN_(SRC|EXAMPLE)/i.test(line)) { closePara(); closeList(); closeTable(); code = []; continue; }
-    if (quote !== null) {
-      if (/^\s*#\+END_QUOTE\s*$/i.test(line)) { out.push('<blockquote>' + quote.map(renderInline).join('<br>') + '</blockquote>'); quote = null; }
-      else quote.push(line);
-      continue;
-    }
-    if (/^\s*#\+BEGIN_QUOTE/i.test(line)) { closePara(); closeList(); closeTable(); quote = []; continue; }
-    if (drawer) { if (/^\s*:END:\s*$/i.test(line)) drawer = false; continue; }
-    if (/^\s*:[\w-]+:\s*$/.test(line)) { closePara(); closeList(); closeTable(); drawer = true; continue; }
-    if (table !== null) { if (/^\s*\|/.test(line)) { table.push(line); continue; } closeTable(); }
-    if ((m = line.match(/^\s*\|/))) { closePara(); closeList(); table = [line]; continue; }
-    if ((m = line.match(/^(\*+)\s+(.+)$/))) {
-      closePara(); closeList(); closeTable();
-      const lvl = Math.min(m[1].length, 6);
-      out.push('<h' + lvl + '>' + renderInline(m[2].replace(/\s+:[\w@#:]+:\s*$/, '').trim()) + '</h' + lvl + '>');
-      continue;
-    }
-    if ((m = line.match(/^\s*[-+]\s+(.*)$/)) || (m = line.match(/^\s+\*\s+(.*)$/))) {
-      closePara(); closeTable();
-      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
-      out.push('<li>' + renderInline(m[1]) + '</li>'); continue;
-    }
-    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
-      closePara(); closeTable();
-      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
-      out.push('<li>' + renderInline(m[1]) + '</li>'); continue;
-    }
-    closeList();
-    if (/^\s*#\+/i.test(line)) continue;
-    if (/^\s*#\s/.test(line)) continue;
-    if (!line.trim()) { closePara(); closeTable(); continue; }
-    para.push(line.trim());
+  function protect(html) {
+    const token = `\u0000HTML_${protectedHtml.length}\u0000`;
+    protectedHtml.push(html);
+    return token;
   }
-  closePara(); closeList(); closeTable();
-  return out.join('\n');
+
+  function safeUrl(value) {
+    const url = String(value || '').trim();
+
+    if (!isSafeUrl(url)) {
+      return '#';
+    }
+
+    return escapeAttribute(url);
+  }
+
+  function safeText(value) {
+    return escapeHtml(String(value ?? ''));
+  }
+
+  /*
+   * YouTube
+   *
+   * [[youtube:VIDEO_ID][Teks]]
+   */
+  source = source.replace(
+    /\[\[youtube:([^\]\s]+)\]\[([^\]]*)\]\]/gi,
+    function (_, videoId, text) {
+      const safeVideoId = safeUrl(videoId);
+      const safeTitle = safeText(text || 'YouTube video');
+
+      return protect(`
+        <div class="youtube-embed">
+          <iframe
+            src="https://www.youtube.com/embed/${safeVideoId}"
+            title="${safeTitle}"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+            loading="lazy">
+          </iframe>
+        </div>
+      `);
+    }
+  );
+
+  /*
+   * Audio
+   *
+   * [[audio:URL][Teks]]
+   */
+  source = source.replace(
+    /\[\[audio:([^\]]+)\]\[([^\]]*)\]\]/gi,
+    function (_, url, text) {
+      const safeAudioUrl = safeUrl(url);
+      const safeAudioText = safeText(text || 'Unduh audio');
+
+      return protect(`
+        <div class="audio-player">
+          <audio controls style="width:100%;">
+            <source src="${safeAudioUrl}" type="audio/mpeg">
+            Browser tidak mendukung audio.
+            <a
+              href="${safeAudioUrl}"
+              target="_blank"
+              rel="noopener">
+              ${safeAudioText}
+            </a>
+          </audio>
+        </div>
+      `);
+    }
+  );
+
+  /*
+   * Link atau gambar dengan deskripsi
+   *
+   * [[URL][Teks]]
+   */
+  source = source.replace(
+    /\[\[([^\]]+)\]\[([^\]]*)\]\]/g,
+    function (_, rawUrl, rawText) {
+      const url = String(rawUrl).trim();
+      const text = String(rawText).trim();
+
+      if (isImageUrl(url)) {
+        return protect(`
+          <img
+            src="${safeUrl(url)}"
+            alt="${safeText(text || 'image')}"
+            loading="lazy"
+            style="display:block;max-width:100%;height:auto;border-radius:4px;margin:10px 0;">
+        `);
+      }
+
+      return protect(`
+        <a
+          href="${safeUrl(url)}"
+          target="_blank"
+          rel="noopener">
+          ${safeText(text || url)}
+        </a>
+      `);
+    }
+  );
+
+  /*
+   * Link atau gambar tanpa deskripsi
+   *
+   * [[URL]]
+   */
+  source = source.replace(
+    /\[\[([^\]]+)\]\]/g,
+    function (_, rawUrl) {
+      const url = String(rawUrl).trim();
+
+      if (isImageUrl(url)) {
+        return protect(`
+          <img
+            src="${safeUrl(url)}"
+            alt="image"
+            loading="lazy"
+            style="display:block;max-width:100%;height:auto;border-radius:4px;margin:10px 0;">
+        `);
+      }
+
+      return protect(`
+        <a
+          href="${safeUrl(url)}"
+          target="_blank"
+          rel="noopener">
+          ${safeText(url)}
+        </a>
+      `);
+    }
+  );
+
+  /*
+   * Escape seluruh teks biasa.
+   *
+   * HTML hasil renderer sudah diganti token sehingga
+   * tidak ikut ter-escape.
+   */
+  source = escapeHtml(source);
+
+  /*
+   * Inline code Org-mode
+   */
+  source = source.replace(
+    /~([^~\n]+)~/g,
+    '<code>$1</code>'
+  );
+
+  source = source.replace(
+    /=([^=\n]+)=/g,
+    '<code>$1</code>'
+  );
+
+  /*
+   * Bold
+   */
+  source = source.replace(
+    /(^|[\s('">])\*([^*\n]+?)\*(?=$|[\s.,;:!?)'"])/g,
+    '$1<strong>$2</strong>'
+  );
+
+  /*
+   * Italic
+   */
+  source = source.replace(
+    /(^|[\s('">])\/([^\/\n]+?)\/(?=$|[\s.,;:!?)'"])/g,
+    '$1<em>$2</em>'
+  );
+
+  /*
+   * Underline
+   */
+  source = source.replace(
+    /(^|[\s('">])_([^_\n]+?)_(?=$|[\s.,;:!?)'"])/g,
+    '$1<u>$2</u>'
+  );
+
+  /*
+   * Kembalikan HTML yang sudah dilindungi.
+   */
+  source = source.replace(
+    /\u0000HTML_(\d+)\u0000/g,
+    function (_, index) {
+      return protectedHtml[Number(index)] || '';
+    }
+  );
+
+  return source;
 }
 
-function excerpt(raw, n = 180) {
-  const text = raw.split('\n').filter(l => !/^\s*(\*|#|\||:|[-+]\s|\d+[.)]\s)/.test(l)).join(' ').replace(/\s+/g, ' ').trim();
-  return text.length > n ? text.slice(0, n).trimEnd() + '…' : text;
+
+/* ================= ORG -> HTML ================= */
+
+function orgToHtml(source) {
+  const output = [];
+
+  let paragraph = [];
+  let listType = null;
+  let codeBlock = null;
+  let quoteBlock = null;
+  let tableRows = null;
+  let insideDrawer = false;
+
+  function closeParagraph() {
+    if (!paragraph.length) return;
+
+    output.push(
+      '<p>' +
+      paragraph
+        .map(renderInline)
+        .join('<br>') +
+      '</p>'
+    );
+
+    paragraph = [];
+  }
+
+  function closeList() {
+    if (!listType) return;
+
+    output.push(`</${listType}>`);
+    listType = null;
+  }
+
+  function closeTable() {
+    if (!tableRows) return;
+
+    const filteredRows = tableRows
+      .filter(row => {
+        return !/^\s*\|[-+|\s]*\|\s*$/.test(row);
+      })
+      .map(row => {
+        return row
+          .trim()
+          .replace(/^\|/, '')
+          .replace(/\|$/, '')
+          .split('|')
+          .map(cell => cell.trim());
+      });
+
+    const header = filteredRows.shift() || [];
+
+    output.push(
+      '<table>' +
+      '<thead>' +
+      '<tr>' +
+      header
+        .map(cell => `<th>${renderInline(cell)}</th>`)
+        .join('') +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+      filteredRows
+        .map(row => {
+          return (
+            '<tr>' +
+            row
+              .map(cell => `<td>${renderInline(cell)}</td>`)
+              .join('') +
+            '</tr>'
+          );
+        })
+        .join('') +
+      '</tbody>' +
+      '</table>'
+    );
+
+    tableRows = null;
+  }
+
+  for (const rawLine of String(source || '').split('\n')) {
+    const line = rawLine.replace(/\s+$/, '');
+
+    let match;
+
+    /*
+     * Source atau example block
+     */
+    if (codeBlock !== null) {
+      if (
+        /^\s*#\+END_(SRC|EXAMPLE)\s*$/i.test(line)
+      ) {
+        output.push(
+          '<pre><code>' +
+          escapeHtml(codeBlock.join('\n')) +
+          '</code></pre>'
+        );
+
+        codeBlock = null;
+      } else {
+        codeBlock.push(rawLine);
+      }
+
+      continue;
+    }
+
+    if (
+      /^\s*#\+BEGIN_(SRC|EXAMPLE)/i.test(line)
+    ) {
+      closeParagraph();
+      closeList();
+      closeTable();
+
+      codeBlock = [];
+      continue;
+    }
+
+    /*
+     * Quote block
+     */
+    if (quoteBlock !== null) {
+      if (
+        /^\s*#\+END_QUOTE\s*$/i.test(line)
+      ) {
+        output.push(
+          '<blockquote>' +
+          quoteBlock
+            .map(renderInline)
+            .join('<br>') +
+          '</blockquote>'
+        );
+
+        quoteBlock = null;
+      } else {
+        quoteBlock.push(line);
+      }
+
+      continue;
+    }
+
+    if (
+      /^\s*#\+BEGIN_QUOTE/i.test(line)
+    ) {
+      closeParagraph();
+      closeList();
+      closeTable();
+
+      quoteBlock = [];
+      continue;
+    }
+
+    /*
+     * Drawer biasa
+     */
+    if (insideDrawer) {
+      if (/^\s*:END:\s*$/i.test(line)) {
+        insideDrawer = false;
+      }
+
+      continue;
+    }
+
+    if (
+      /^\s*:[\w-]+:\s*$/.test(line)
+    ) {
+      closeParagraph();
+      closeList();
+      closeTable();
+
+      insideDrawer = true;
+      continue;
+    }
+
+    /*
+     * Tabel Org-mode
+     */
+    if (tableRows !== null) {
+      if (/^\s*\|/.test(line)) {
+        tableRows.push(line);
+        continue;
+      }
+
+      closeTable();
+    }
+
+    if (/^\s*\|/.test(line)) {
+      closeParagraph();
+      closeList();
+
+      tableRows = [line];
+      continue;
+    }
+
+    /*
+     * Heading
+     */
+    match = line.match(/^(\*+)\s+(.+)$/);
+
+    if (match) {
+      closeParagraph();
+      closeList();
+      closeTable();
+
+      const level = Math.min(match[1].length, 6);
+
+      const heading = match[2]
+        .replace(/\s+:[\w@#:%-]+:\s*$/, '')
+        .trim();
+
+      output.push(
+        `<h${level}>${renderInline(heading)}</h${level}>`
+      );
+
+      continue;
+    }
+
+    /*
+     * Unordered list
+     */
+    match =
+      line.match(/^\s*[-+]\s+(.*)$/) ||
+      line.match(/^\s+\*\s+(.*)$/);
+
+    if (match) {
+      closeParagraph();
+      closeTable();
+
+      if (listType !== 'ul') {
+        closeList();
+        output.push('<ul>');
+        listType = 'ul';
+      }
+
+      output.push(
+        `<li>${renderInline(match[1])}</li>`
+      );
+
+      continue;
+    }
+
+    /*
+     * Ordered list
+     */
+    match = line.match(
+      /^\s*\d+[.)]\s+(.*)$/
+    );
+
+    if (match) {
+      closeParagraph();
+      closeTable();
+
+      if (listType !== 'ol') {
+        closeList();
+        output.push('<ol>');
+        listType = 'ol';
+      }
+
+      output.push(
+        `<li>${renderInline(match[1])}</li>`
+      );
+
+      continue;
+    }
+
+    closeList();
+
+    /*
+     * Directive Org-mode
+     */
+    if (/^\s*#\+/i.test(line)) {
+      continue;
+    }
+
+    /*
+     * Komentar Org-mode
+     */
+    if (/^\s*#\s/.test(line)) {
+      continue;
+    }
+
+    /*
+     * Baris kosong
+     */
+    if (!line.trim()) {
+      closeParagraph();
+      closeTable();
+      continue;
+    }
+
+    /*
+     * Link gambar yang berdiri sendiri.
+     *
+     * Ini membuat gambar tidak dibungkus <p>.
+     */
+    const standaloneImage = line
+      .trim()
+      .match(
+        /^\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp|svg|avif|bmp|tif|tiff)(?:[?#][^\]]*)?)\]\]$/i
+      );
+
+    if (standaloneImage) {
+      closeParagraph();
+      closeTable();
+
+      output.push(
+        renderInline(line.trim())
+      );
+
+      continue;
+    }
+
+    paragraph.push(line.trim());
+  }
+
+  closeParagraph();
+  closeList();
+  closeTable();
+
+  return output.join('\n');
 }
+
+
+/* ================= EXCERPT ================= */
+
+function excerpt(raw, length = 180) {
+  const text = String(raw || '')
+    .split('\n')
+    .filter(line => {
+      return !/^\s*(\*|#|\||:|[-+]\s|\d+[.)]\s)/.test(line);
+    })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text.length > length
+    ? text.slice(0, length).trimEnd() + '…'
+    : text;
+}
+
 
 /* ================= APLIKASI ================= */
+
 let ARTICLES = [];
 let currentFilter = '';
 let currentLayout = 'all';
+
 const app = document.getElementById('app');
 
+
 function getLayouts() {
-  const layouts = new Set(ARTICLES.map(a => a.layout));
-  return ['all', ...Array.from(layouts).filter(l => l !== 'all')];
+  const layouts = new Set(
+    ARTICLES.map(article => article.layout)
+  );
+
+  return [
+    'all',
+    ...Array.from(layouts).filter(
+      layout => layout !== 'all'
+    )
+  ];
 }
 
+
 async function load() {
-  const loadingEl = document.getElementById('loading');
+  const loadingElement =
+    document.getElementById('loading');
+
   try {
-    const res = await fetch(TARGET_URL);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const rawText = await res.text();
-    if (rawText.trim().startsWith('<!DOCTYPE') || rawText.toLowerCase().includes('<html')) {
-       showError("URL mengembalikan halaman web, bukan file teks.");
-       return;
+    console.log(
+      'Mengambil data dari:',
+      TARGET_URL
+    );
+
+    const response = await fetch(TARGET_URL, {
+      method: 'GET',
+      cache: 'no-cache'
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP Error: ${response.status} ${response.statusText}`
+      );
     }
-    const cleanText = rawText.replace(/^\uFEFF/, '');
-    ARTICLES = parseOrg(cleanText).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    if (ARTICLES.length === 0) {
-      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi.");
+
+    const rawText = await response.text();
+
+    const lowerText = rawText
+      .trim()
+      .slice(0, 500)
+      .toLowerCase();
+
+    if (
+      lowerText.startsWith('<!doctype') ||
+      lowerText.includes('<html')
+    ) {
+      showError(
+        'URL mengembalikan halaman web, bukan file teks. ' +
+        'Pastikan proxy Anda mengembalikan file .org mentah.'
+      );
+
       return;
     }
-  } catch (e) {
-    showError('Gagal memuat: ' + e.message);
+
+    const cleanText = rawText.replace(/^\uFEFF/, '');
+
+    ARTICLES = parseOrg(cleanText)
+      .sort((first, second) => {
+        return (second.date || '')
+          .localeCompare(first.date || '');
+      });
+
+    if (!ARTICLES.length) {
+      showError(
+        'File berhasil dimuat, tetapi tidak ada artikel yang ' +
+        'terdeteksi. Pastikan format file .org benar dan artikel ' +
+        'dimulai dengan <code>* Judul</code>.'
+      );
+
+      return;
+    }
+  } catch (error) {
+    console.error(error);
+
+    showError(
+      'Gagal memuat: ' +
+      escapeHtml(error.message) +
+      '<br><br>' +
+      'Pastikan URL proxy aktif dan mengembalikan file teks.'
+    );
+
     return;
   }
-  if (loadingEl) loadingEl.remove();
+
+  if (loadingElement) {
+    loadingElement.remove();
+  }
+
   route();
 }
 
-function showError(msg) {
-  const loadingEl = document.getElementById('loading');
-  if (loadingEl) {
-    loadingEl.innerHTML = '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:1.5rem; border-radius:8px; text-align:left; max-width:600px; margin:2rem auto;"><p style="font-weight:bold; margin-bottom:0.5rem;">❌ Gagal memuat artikel</p><p style="font-size:0.9rem; line-height:1.6;">' + msg + '</p></div>';
-  }
+
+function showError(message) {
+  const loadingElement =
+    document.getElementById('loading');
+
+  if (!loadingElement) return;
+
+  loadingElement.innerHTML = `
+    <div style="
+      background:#fef2f2;
+      border:1px solid #fecaca;
+      color:#991b1b;
+      padding:1.5rem;
+      border-radius:8px;
+      text-align:left;
+      max-width:600px;
+      margin:2rem auto;
+    ">
+      <p style="
+        font-weight:bold;
+        margin-bottom:0.5rem;
+      ">
+        ❌ Gagal memuat artikel
+      </p>
+
+      <p style="
+        font-size:0.9rem;
+        line-height:1.6;
+      ">
+        ${message}
+      </p>
+    </div>
+  `;
 }
+
 
 function renderList() {
   document.title = SITE_TITLE;
+
   const layouts = getLayouts();
-  const layoutLabels = { 'all': '📚 Semua', 'post': '📝 Blog', 'book': '📖 Buku' };
-  
-  app.innerHTML = '<div class="tabs">' + layouts.map(l => '<button class="tab-btn ' + (currentLayout === l ? 'active' : '') + '" data-layout="' + l + '">' + (layoutLabels[l] || l) + '</button>').join('') + '</div><input id="q" type="search" placeholder="Cari artikel…" value="' + escapeHtml(currentFilter) + '"><div id="list"></div>';
-    
-  const listEl = document.getElementById('list');
-  const draw = () => {
-    const q = currentFilter.toLowerCase();
-    const items = ARTICLES.filter(a => {
-      if (currentLayout !== 'all' && a.layout !== currentLayout) return false;
-      if (!q) return true;
-      return a.title.toLowerCase().includes(q) || a.raw.toLowerCase().includes(q) || a.tags.some(t => t.toLowerCase().includes(q));
-    });
-    listEl.innerHTML = items.length ? items.map(a => '<div class="item"><h2><a href="#/artikel/' + encodeURIComponent(a.slug) + '">' + escapeHtml(a.title) + '</a></h2><div class="meta">' + (a.date || 'tanpa tanggal') + ' <span class="layout-badge">' + a.layout + '</span> ' + a.tags.map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('') + '</div><div class="excerpt">' + escapeHtml(excerpt(a.raw)) + '</div></div>').join('') : '<p>Tidak ada hasil.</p>';
+
+  const layoutLabels = {
+    all: '📚 Semua',
+    post: '📝 Blog',
+    book: '📖 Buku'
   };
 
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => { currentLayout = btn.dataset.layout; currentFilter = ''; renderList(); });
+  app.innerHTML = `
+    <div class="tabs">
+      ${layouts.map(layout => `
+        <button
+          class="tab-btn ${currentLayout === layout ? 'active' : ''}"
+          data-layout="${escapeAttribute(layout)}">
+          ${escapeHtml(layoutLabels[layout] || layout)}
+        </button>
+      `).join('')}
+    </div>
+
+    <input
+      id="q"
+      type="search"
+      placeholder="Cari artikel…"
+      value="${escapeAttribute(currentFilter)}">
+
+    <div id="list"></div>
+  `;
+
+  const listElement =
+    document.getElementById('list');
+
+  function drawList() {
+    const query = currentFilter
+      .toLowerCase()
+      .trim();
+
+    const filteredArticles = ARTICLES.filter(article => {
+      if (
+        currentLayout !== 'all' &&
+        article.layout !== currentLayout
+      ) {
+        return false;
+      }
+
+      if (!query) return true;
+
+      return (
+        article.title.toLowerCase().includes(query) ||
+        article.raw.toLowerCase().includes(query) ||
+        article.tags.some(tag =>
+          tag.toLowerCase().includes(query)
+        )
+      );
+    });
+
+    if (!filteredArticles.length) {
+      listElement.innerHTML =
+        '<p>Tidak ada hasil.</p>';
+
+      return;
+    }
+
+    listElement.innerHTML = filteredArticles
+      .map(article => {
+        const articleSlug =
+          encodeURIComponent(article.slug);
+
+        const tags = article.tags
+          .map(tag => `
+            <span class="tag">
+              ${escapeHtml(tag)}
+            </span>
+          `)
+          .join('');
+
+        return `
+          <div class="item">
+            <h2>
+              <a href="#/artikel/${articleSlug}">
+                ${escapeHtml(article.title)}
+              </a>
+            </h2>
+
+            <div class="meta">
+              ${escapeHtml(article.date || 'tanpa tanggal')}
+
+              <span class="layout-badge">
+                ${escapeHtml(article.layout)}
+              </span>
+
+              ${tags}
+            </div>
+
+            <div class="excerpt">
+              ${escapeHtml(excerpt(article.raw))}
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  document
+    .querySelectorAll('.tab-btn')
+    .forEach(button => {
+      button.addEventListener('click', () => {
+        currentLayout = button.dataset.layout;
+        currentFilter = '';
+
+        renderList();
+      });
+    });
+
+  let searchTimeout;
+
+  const searchElement =
+    document.getElementById('q');
+
+  searchElement.addEventListener('input', event => {
+    clearTimeout(searchTimeout);
+
+    searchTimeout = setTimeout(() => {
+      currentFilter = event.target.value;
+      drawList();
+    }, 200);
   });
 
-  let timeout;
-  document.getElementById('q').addEventListener('input', e => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => { currentFilter = e.target.value; draw(); }, 200);
-  });
-  draw();
+  drawList();
 }
 
+
 function renderArticle(slug) {
-  const a = ARTICLES.find(x => x.slug === slug);
-  if (!a) { app.innerHTML = '<p>Artikel tidak ditemukan. <a href="#/">← Kembali</a></p>'; return; }
-  document.title = a.title + ' — ' + SITE_TITLE;
-  const d = a.date ? new Date(a.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-  app.innerHTML = '<article><div class="meta"><a href="#/">← Kembali</a> · ' + d + ' <span class="layout-badge">' + a.layout + '</span></div><h1>' + escapeHtml(a.title) + '</h1><div style="margin-bottom:1.5rem;">' + a.tags.map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('') + '</div><div class="content">' + orgToHtml(a.raw) + '</div><hr><a href="#/">← Kembali ke daftar artikel</a></article>';
+  const article = ARTICLES.find(
+    item => item.slug === slug
+  );
+
+  if (!article) {
+    app.innerHTML = `
+      <p>
+        Artikel tidak ditemukan.
+        <a href="#/">← Kembali</a>
+      </p>
+    `;
+
+    return;
+  }
+
+  document.title =
+    `${article.title} — ${SITE_TITLE}`;
+
+  const formattedDate = article.date
+    ? new Date(
+        `${article.date}T00:00:00`
+      ).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      })
+    : '';
+
+  const tags = article.tags
+    .map(tag => `
+      <span class="tag">
+        ${escapeHtml(tag)}
+      </span>
+    `)
+    .join('');
+
+  app.innerHTML = `
+    <article>
+      <div class="meta">
+        <a href="#/">← Kembali</a>
+        · ${escapeHtml(formattedDate)}
+
+        <span class="layout-badge">
+          ${escapeHtml(article.layout)}
+        </span>
+      </div>
+
+      <h1>
+        ${escapeHtml(article.title)}
+      </h1>
+
+      <div style="margin-bottom:1.5rem;">
+        ${tags}
+      </div>
+
+      <div class="content">
+        ${orgToHtml(article.raw)}
+      </div>
+
+      <hr>
+
+      <a href="#/">
+        ← Kembali ke daftar artikel
+      </a>
+    </article>
+  `;
+
   window.scrollTo(0, 0);
 }
 
+
+/* ================= ROUTER ================= */
+
 function route() {
-  const m = (location.hash || '#/').match(/^#\/artikel\/(.+)$/);
-  if (m) renderArticle(decodeURIComponent(m[1]));
-  else renderList();
+  const match = (
+    location.hash || '#/'
+  ).match(/^#\/artikel\/(.+)$/);
+
+  if (match) {
+    renderArticle(
+      decodeURIComponent(match[1])
+    );
+  } else {
+    renderList();
+  }
 }
 
-window.addEventListener('hashchange', route);
-window.addEventListener('DOMContentLoaded', load);
+
+/* ================= EVENT ================= */
+
+window.addEventListener(
+  'hashchange',
+  route
+);
+
+window.addEventListener(
+  'DOMContentLoaded',
+  load
+);
