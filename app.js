@@ -1,6 +1,8 @@
 /* ================= KONFIG ================= */
 const ORG_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org'; // Ganti dengan link Nextcloud Anda
 const SITE_TITLE = 'Blog Udin';
+// Proxy otomatis jika server memblokir CORS
+const PROXY_URL = 'https://corsproxy.io/?' + encodeURIComponent(ORG_URL);
 
 /* ================= UTIL ================= */
 function escapeHtml(s) {
@@ -62,17 +64,14 @@ function parseOrg(text) {
 function renderInline(s) {
   s = escapeHtml(s);
 
-  // 1. Render YouTube: [[youtube:VIDEO_ID][teks]]
   s = s.replace(/\[\[youtube:([^\]]+)\]\[([^\]]+)\]\]/g, (_, videoId, text) => {
     return `<div class="youtube-embed"><iframe src="https://www.youtube.com/embed/${videoId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`;
   });
 
-  // 2. Render Audio: [[audio:URL][teks]]
   s = s.replace(/\[\[audio:([^\]]+)\]\[([^\]]+)\]\]/g, (_, url, text) => {
     return `<div class="audio-player"><audio controls style="width:100%;"><source src="${url}" type="audio/mp4"><source src="${url}" type="audio/mpeg">Browser tidak mendukung audio. <a href="${url}">Unduh di sini</a>.</audio></div>`;
   });
 
-  // 3. Link dengan teks: [[url][teks]]
   s = s.replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, (_, u, t) => {
     if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u)) {
       return `<img src="${u}" alt="${t}" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">`;
@@ -80,7 +79,6 @@ function renderInline(s) {
     return `<a href="${u}" target="_blank" rel="noopener">${t}</a>`;
   });
 
-  // 4. Link tanpa teks: [[url]]
   s = s.replace(/\[\[([^\]]+)\]\]/g, (_, u) => {
     if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u)) {
       return `<img src="${u}" alt="image" style="max-width:100%; height:auto; border-radius:4px; margin: 10px 0;">`;
@@ -88,7 +86,6 @@ function renderInline(s) {
     return `<a href="${u}" target="_blank" rel="noopener">${u}</a>`;
   });
 
-  // 5. Kode inline & Format teks
   s = s.replace(/~([^~\n]+)~/g, '<code>$1</code>');
   s = s.replace(/=([^=\n]+)=/g, '<code>$1</code>');
   s = s.replace(/(^|[\s('">])\*([^*\n]+?)\*(?=$|[\s.,;:!?)'"])/g, '$1<strong>$2</strong>');
@@ -179,20 +176,65 @@ function getLayouts() {
 }
 
 async function load() {
+  const loadingEl = document.getElementById('loading');
+  let res = null;
+  
   try {
-    const res = await fetch(ORG_URL);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const cleanText = (await res.text()).replace(/^\uFEFF/, '');
-    ARTICLES = parseOrg(cleanText).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    console.log("⏳ Mencoba fetch langsung ke Nextcloud...");
+    res = await fetch(ORG_URL);
+    console.log("✅ Fetch langsung berhasil.");
   } catch (e) {
-    const loadingEl = document.getElementById('loading');
-    if (loadingEl) loadingEl.textContent = '';
-    app.innerHTML = `<p style="color:red;">Gagal memuat: ${escapeHtml(e.message)}<br>Pastikan link Nextcloud benar dan berakhiran <code>/download</code>.</p>`;
+    console.warn("⚠️ Fetch langsung diblokir (kemungkinan CORS). Mencoba via proxy...");
+    try {
+      res = await fetch(PROXY_URL);
+      console.log("✅ Fetch via proxy berhasil.");
+    } catch (e2) {
+      showError("Koneksi gagal total. Periksa koneksi internet Anda.");
+      return;
+    }
+  }
+
+  if (!res.ok) {
+    showError(`HTTP Error: ${res.status} ${res.statusText}`);
     return;
   }
-  const loadingEl = document.getElementById('loading');
+
+  try {
+    const rawText = await res.text();
+    
+    // Pengecekan penting: Pastikan yang diambil adalah file teks, bukan halaman HTML Nextcloud
+    if (rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
+      showError("URL mengembalikan halaman HTML Nextcloud, bukan file teks artikel.org. Pastikan URL diakhiri dengan <code>/download</code> atau <code>/download/artikel.org</code> yang valid.");
+      return;
+    }
+
+    const cleanText = rawText.replace(/^\uFEFF/, '');
+    ARTICLES = parseOrg(cleanText).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    
+    if (ARTICLES.length === 0) {
+      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi. Cek format <code>* Judul</code> di file artikel.org.");
+      return;
+    }
+    
+  } catch (e) {
+    showError("Gagal memproses file: " + e.message);
+    return;
+  }
+
   if (loadingEl) loadingEl.remove();
   route();
+}
+
+function showError(msg) {
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) {
+    loadingEl.innerHTML = `
+      <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:1.5rem; border-radius:8px; text-align:left; max-width:600px; margin:2rem auto;">
+        <p style="font-weight:bold; margin-bottom:0.5rem;">❌ Gagal memuat artikel</p>
+        <p style="font-size:0.9rem; line-height:1.5;">${msg}</p>
+      </div>
+    `;
+  }
 }
 
 function renderList() {
@@ -259,4 +301,5 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
+window.addEventListener('DOMContentLoaded', load);
 window.addEventListener('DOMContentLoaded', load);
