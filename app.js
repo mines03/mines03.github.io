@@ -1,7 +1,14 @@
 /* ================= KONFIG ================= */
-const ORG_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org';
-// Proxy otomatis digunakan jika server Nextcloud memblokir akses langsung (CORS)
-const PROXY_URL = 'https://corsproxy.io/?' + encodeURIComponent(ORG_URL);
+// URL asli Anda. (Jika ini share file tunggal, coba juga tanpa '/artikel.org' di akhir, cukup '/download')
+const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org';
+
+// Daftar strategi pengambilan data (Direct -> Proxy 1 -> Proxy 2)
+const FETCH_STRATEGIES = [
+  TARGET_URL, // 1. Coba langsung dulu (paling cepat jika CORS terbuka)
+  `https://api.allorigins.win/raw?url=${encodeURIComponent(TARGET_URL)}`, // 2. Proxy AllOrigins (sangat stabil untuk teks)
+  `https://corsproxy.io/?${encodeURIComponent(TARGET_URL)}` // 3. Proxy CorsProxy.io (fallback terakhir)
+];
+
 const SITE_TITLE = 'Blog Saya';
 
 /* ================= UTIL ================= */
@@ -152,21 +159,35 @@ function getLayouts() {
 async function load() {
   const loadingEl = document.getElementById('loading');
   let res = null;
+  let lastError = 'Unknown error';
 
-  try {
-    // Coba ambil langsung terlebih dahulu
-    res = await fetch(ORG_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  } catch (e) {
-    console.warn("Diblokir CORS. Menggunakan proxy otomatis...");
+  // 🔁 LOOPING STRATEGI: Coba satu per satu sampai ada yang berhasil
+  for (const url of FETCH_STRATEGIES) {
     try {
-      // Jika gagal, gunakan proxy
-      res = await fetch(PROXY_URL);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (e2) {
-      showError("Gagal total. Server Nextcloud memblokir akses dan proxy tidak merespons.");
-      return;
+      console.log(`🔄 Mencoba mengambil dari: ${url.substring(0, 50)}...`);
+      res = await fetch(url);
+      if (res.ok) {
+        console.log("✅ Berhasil mengambil data!");
+        break; // Keluar dari loop jika sukses (HTTP 200)
+      } else {
+        lastError = `HTTP ${res.status} ${res.statusText}`;
+        console.warn(`⚠️ Gagal (${res.status}), mencoba fallback berikutnya...`);
+      }
+    } catch (e) {
+      lastError = e.message;
+      console.warn(`⚠️ Error jaringan, mencoba fallback berikutnya...`);
     }
+  }
+
+  // Jika semua strategi gagal
+  if (!res || !res.ok) {
+    showError(`Gagal mengambil data setelah mencoba beberapa metode.<br>
+    Error terakhir: <strong>${lastError}</strong><br><br>
+    <strong>Penyebab paling mungkin:</strong><br>
+    1. Server Nextcloud Anda memiliki firewall (seperti Cloudflare/Fail2Ban) yang memblokir semua proxy.<br>
+    2. Link share memerlukan password atau sudah kedaluwarsa.<br>
+    3. Coba ubah URL di baris 3 menjadi: <code>https://mydrive.id/s/YZmpJtJnAxPbfAW/download</code> (tanpa /artikel.org)`);
+    return;
   }
 
   try {
@@ -174,7 +195,7 @@ async function load() {
     
     // Validasi: Pastikan ini file teks, bukan halaman HTML Nextcloud
     if (rawText.trim().startsWith('<!DOCTYPE') || rawText.toLowerCase().includes('<html')) {
-       showError("URL mengembalikan halaman web, bukan file teks. Pastikan link berakhiran <code>/download/artikel.org</code> yang valid.");
+       showError("URL mengembalikan halaman web login/share, bukan file teks.<br>Pastikan link share publik Anda benar dan tidak memerlukan password.");
        return;
     }
 
@@ -182,7 +203,7 @@ async function load() {
     ARTICLES = parseOrg(cleanText).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     
     if (ARTICLES.length === 0) {
-      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi. Pastikan format file .org benar (dimulai dengan <code>* Judul</code>).");
+      showError("File berhasil dimuat, tapi tidak ada artikel yang terdeteksi.<br>Pastikan file .org Anda memiliki format yang benar (dimulai dengan <code>* Judul Artikel</code>).");
       return;
     }
     
@@ -200,7 +221,7 @@ function showError(msg) {
   if (loadingEl) {
     loadingEl.innerHTML = `<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:1.5rem; border-radius:8px; text-align:left; max-width:600px; margin:2rem auto;">
       <p style="font-weight:bold; margin-bottom:0.5rem;">❌ Gagal memuat artikel</p>
-      <p style="font-size:0.9rem; line-height:1.5;">${msg}</p>
+      <p style="font-size:0.9rem; line-height:1.6;">${msg}</p>
     </div>`;
   }
 }
