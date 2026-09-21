@@ -2,11 +2,6 @@
 
 const TARGET_URL = 'https://artikel-proxy.extra03-mine.workers.dev/';
 
-const SITE_TITLE = 'Blog Saya';
-
-
-/* ================= STATE ================= */
-
 let ARTICLES = [];
 let currentLayout = 'post';
 let currentFilter = '';
@@ -14,8 +9,11 @@ let currentTag = '';
 
 const app = document.getElementById('app');
 
+const SITE_TITLE =
+  typeof window.SITE_TITLE !== 'undefined'
+    ? window.SITE_TITLE
+    : 'Blog Saya';
 
-/* ================= UTILITAS ================= */
 
 function escapeHtml(value) {
   if (value === null || value === undefined) {
@@ -30,9 +28,11 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+
 function escapeAttribute(value) {
   return escapeHtml(String(value ?? ''));
 }
+
 
 function slugify(value) {
   return String(value || '')
@@ -42,6 +42,7 @@ function slugify(value) {
     .trim()
     .replace(/\s+/g, '-');
 }
+
 
 function parseDate(value) {
   if (!value) {
@@ -55,41 +56,33 @@ function parseDate(value) {
   return match ? match[1] : null;
 }
 
+
 function normalizeTag(value) {
   return String(value || '')
     .trim()
     .toLowerCase();
 }
 
+
 function normalizeLayout(value) {
   const layout = String(value || '')
     .trim()
     .toLowerCase();
 
-  /*
-   * Aplikasi hanya menerima dua layout:
-   * post dan book.
-   */
-  if (layout === 'post') {
-    return 'post';
-  }
-
   if (layout === 'book') {
     return 'book';
   }
 
-  /*
-   * Nilai layout lain dianggap post
-   * agar artikel tetap dapat tampil.
-   */
   return 'post';
 }
+
 
 function isSafeUrl(value) {
   const url = String(value || '').trim();
 
   return !/^(javascript|vbscript|data):/i.test(url);
 }
+
 
 function isImageUrl(value) {
   const url = String(value || '').trim();
@@ -110,31 +103,30 @@ function isImageUrl(value) {
   }
 }
 
-function getPlaceholderCover(
-  text = 'Tidak ada cover'
-) {
+
+function getPlaceholderImage() {
   return (
     'data:image/svg+xml;charset=UTF-8,' +
     encodeURIComponent(`
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="600"
-        height="850"
-        viewBox="0 0 600 850">
+        width="800"
+        height="1000"
+        viewBox="0 0 800 1000">
 
         <rect
-          width="600"
-          height="850"
+          width="800"
+          height="1000"
           fill="#e5e7eb"/>
 
         <text
-          x="300"
-          y="400"
+          x="400"
+          y="500"
           text-anchor="middle"
           font-family="Arial, sans-serif"
           font-size="32"
           fill="#6b7280">
-          ${text}
+          Cover tidak tersedia
         </text>
       </svg>
     `)
@@ -142,15 +134,9 @@ function getPlaceholderCover(
 }
 
 
-/* ================= COVER BUKU ================= */
-
 function findFirstImageUrl(raw) {
   const text = String(raw || '');
 
-  /*
-   * Format:
-   * [[URL][Deskripsi]]
-   */
   const imageWithDescription = text.match(
     /\[\[([^\]\s]+?\.(?:jpg|jpeg|png|gif|webp|svg|avif|bmp|tif|tiff)(?:[?#].*)?)\]\[[^\]]*\]\]/i
   );
@@ -159,10 +145,6 @@ function findFirstImageUrl(raw) {
     return imageWithDescription[1].trim();
   }
 
-  /*
-   * Format:
-   * [[URL]]
-   */
   const imageWithoutDescription = text.match(
     /\[\[([^\]\s]+?\.(?:jpg|jpeg|png|gif|webp|svg|avif|bmp|tif|tiff)(?:[?#].*)?)\]\]/i
   );
@@ -175,8 +157,6 @@ function findFirstImageUrl(raw) {
 }
 
 
-/* ================= TAG ================= */
-
 function tagButton(tag) {
   const cleanTag = String(tag || '').trim();
 
@@ -188,15 +168,12 @@ function tagButton(tag) {
     <button
       type="button"
       class="tag tag-button"
-      data-tag="${escapeAttribute(cleanTag)}"
-      title="Tampilkan artikel dengan tag ${escapeAttribute(cleanTag)}">
+      data-tag="${escapeAttribute(cleanTag)}">
       ${escapeHtml(cleanTag)}
     </button>
   `;
 }
 
-
-/* ================= PARSER ORG ================= */
 
 function parseOrg(text) {
   const articles = [];
@@ -230,9 +207,6 @@ function parseOrg(text) {
       currentArticle.props.id ||
       slugify(currentArticle.title);
 
-    /*
-     * Hanya post atau book.
-     */
     currentArticle.layout = normalizeLayout(
       currentArticle.props.layout || 'post'
     );
@@ -265,9 +239,6 @@ function parseOrg(text) {
       /^(\*+)\s+(.*)$/
     );
 
-    /*
-     * Heading level satu adalah artikel.
-     */
     if (
       headingMatch &&
       headingMatch[1].length === 1
@@ -277,10 +248,6 @@ function parseOrg(text) {
       let title = headingMatch[2].trim();
       let tags = [];
 
-      /*
-       * Contoh:
-       * * Harry Potter :fantasy:books:
-       */
       const tagMatch = title.match(
         /^(.*?)\s+(:[\w@#:%-]+:)\s*$/
       );
@@ -306,9 +273,6 @@ function parseOrg(text) {
       continue;
     }
 
-    /*
-     * Awal property drawer.
-     */
     if (
       /^\s*:PROPERTIES:\s*$/i.test(line)
     ) {
@@ -316,9 +280,6 @@ function parseOrg(text) {
       continue;
     }
 
-    /*
-     * Akhir property drawer.
-     */
     if (
       insideDrawer &&
       /^\s*:END:\s*$/i.test(line)
@@ -327,9 +288,6 @@ function parseOrg(text) {
       continue;
     }
 
-    /*
-     * Baca property drawer.
-     */
     if (insideDrawer) {
       const propertyMatch = line.match(
         /^\s*:([\w-]+):\s*(.*)$/
@@ -354,8 +312,6 @@ function parseOrg(text) {
   return articles;
 }
 
-
-/* ================= INLINE ORG KE HTML ================= */
 
 function renderInline(input) {
   let source = String(input ?? '');
@@ -384,10 +340,6 @@ function renderInline(input) {
     return escapeHtml(String(value ?? ''));
   }
 
-  /*
-   * YouTube:
-   * [[youtube:ID][Teks]]
-   */
   source = source.replace(
     /\[\[youtube:([^\]\s]+)\]\[([^\]]*)\]\]/gi,
     function (_, videoId, text) {
@@ -410,10 +362,6 @@ function renderInline(input) {
     }
   );
 
-  /*
-   * Audio:
-   * [[audio:URL][Teks]]
-   */
   source = source.replace(
     /\[\[audio:([^\]]+)\]\[([^\]]*)\]\]/gi,
     function (_, url, text) {
@@ -443,10 +391,6 @@ function renderInline(input) {
     }
   );
 
-  /*
-   * Link/gambar dengan deskripsi:
-   * [[URL][Teks]]
-   */
   source = source.replace(
     /\[\[([^\]]+)\]\[([^\]]*)\]\]/g,
     function (_, rawUrl, rawText) {
@@ -480,10 +424,6 @@ function renderInline(input) {
     }
   );
 
-  /*
-   * Link/gambar tanpa deskripsi:
-   * [[URL]]
-   */
   source = source.replace(
     /\[\[([^\]]+)\]\]/g,
     function (_, rawUrl) {
@@ -516,14 +456,8 @@ function renderInline(input) {
     }
   );
 
-  /*
-   * Escape semua teks biasa.
-   */
   source = escapeHtml(source);
 
-  /*
-   * Inline code.
-   */
   source = source.replace(
     /~([^~\n]+)~/g,
     '<code>$1</code>'
@@ -534,33 +468,21 @@ function renderInline(input) {
     '<code>$1</code>'
   );
 
-  /*
-   * Bold.
-   */
   source = source.replace(
     /(^|[\s('">])\*([^*\n]+?)\*(?=$|[\s.,;:!?)'"])/g,
     '$1<strong>$2</strong>'
   );
 
-  /*
-   * Italic.
-   */
   source = source.replace(
     /(^|[\s('">])\/([^\/\n]+?)\/(?=$|[\s.,;:!?)'"])/g,
     '$1<em>$2</em>'
   );
 
-  /*
-   * Underline.
-   */
   source = source.replace(
     /(^|[\s('">])_([^_\n]+?)_(?=$|[\s.,;:!?)'"])/g,
     '$1<u>$2</u>'
   );
 
-  /*
-   * Kembalikan HTML yang dilindungi.
-   */
   source = source.replace(
     /\u0000HTML_(\d+)\u0000/g,
     function (_, index) {
@@ -571,8 +493,6 @@ function renderInline(input) {
   return source;
 }
 
-
-/* ================= ORG KE HTML ================= */
 
 function orgToHtml(source) {
   const output = [];
@@ -667,9 +587,6 @@ function orgToHtml(source) {
 
     let match;
 
-    /*
-     * Source/example block.
-     */
     if (codeBlock !== null) {
       if (
         /^\s*#\+END_(SRC|EXAMPLE)\s*$/i.test(line)
@@ -699,9 +616,6 @@ function orgToHtml(source) {
       continue;
     }
 
-    /*
-     * Quote block.
-     */
     if (quoteBlock !== null) {
       if (
         /^\s*#\+END_QUOTE\s*$/i.test(line)
@@ -733,9 +647,6 @@ function orgToHtml(source) {
       continue;
     }
 
-    /*
-     * Drawer.
-     */
     if (insideDrawer) {
       if (
         /^\s*:END:\s*$/i.test(line)
@@ -757,9 +668,6 @@ function orgToHtml(source) {
       continue;
     }
 
-    /*
-     * Tabel.
-     */
     if (tableRows !== null) {
       if (/^\s*\|/.test(line)) {
         tableRows.push(line);
@@ -777,9 +685,6 @@ function orgToHtml(source) {
       continue;
     }
 
-    /*
-     * Heading.
-     */
     match = line.match(/^(\*+)\s+(.+)$/);
 
     if (match) {
@@ -803,9 +708,6 @@ function orgToHtml(source) {
       continue;
     }
 
-    /*
-     * Unordered list.
-     */
     match =
       line.match(/^\s*[-+]\s+(.*)$/) ||
       line.match(/^\s+\*\s+(.*)$/);
@@ -827,9 +729,6 @@ function orgToHtml(source) {
       continue;
     }
 
-    /*
-     * Ordered list.
-     */
     match = line.match(
       /^\s*\d+[.)]\s+(.*)$/
     );
@@ -853,32 +752,20 @@ function orgToHtml(source) {
 
     closeList();
 
-    /*
-     * Directive.
-     */
     if (/^\s*#\+/i.test(line)) {
       continue;
     }
 
-    /*
-     * Komentar.
-     */
     if (/^\s*#\s/.test(line)) {
       continue;
     }
 
-    /*
-     * Baris kosong.
-     */
     if (!line.trim()) {
       closeParagraph();
       closeTable();
       continue;
     }
 
-    /*
-     * Gambar standalone.
-     */
     const standaloneImage = line
       .trim()
       .match(
@@ -907,8 +794,6 @@ function orgToHtml(source) {
 }
 
 
-/* ================= EXCERPT ================= */
-
 function excerpt(raw, length = 180) {
   const text = String(raw || '')
     .split('\n')
@@ -925,8 +810,6 @@ function excerpt(raw, length = 180) {
 }
 
 
-/* ================= FILTER TAG ================= */
-
 function setTagFilter(tag) {
   currentTag = String(tag || '').trim();
   currentFilter = '';
@@ -939,24 +822,18 @@ function setTagFilter(tag) {
   });
 }
 
+
 function clearTagFilter() {
   currentTag = '';
   renderList();
 }
 
 
-/* ================= LOAD ================= */
-
 async function load() {
   const loadingElement =
     document.getElementById('loading');
 
   try {
-    console.log(
-      'Mengambil data dari:',
-      TARGET_URL
-    );
-
     const response = await fetch(TARGET_URL, {
       method: 'GET',
       cache: 'no-cache'
@@ -992,11 +869,17 @@ async function load() {
       ''
     );
 
-    ARTICLES = parseOrg(cleanText)
-      .sort((first, second) => {
-        return (second.date || '')
-          .localeCompare(first.date || '');
-      });
+    ARTICLES = parseOrg(cleanText);
+
+    ARTICLES.sort((first, second) => {
+      const firstDate =
+        first.date || '9999-12-31';
+
+      const secondDate =
+        second.date || '9999-12-31';
+
+      return firstDate.localeCompare(secondDate);
+    });
 
     if (!ARTICLES.length) {
       showError(
@@ -1027,8 +910,6 @@ async function load() {
   route();
 }
 
-
-/* ================= ERROR ================= */
 
 function showError(message) {
   const loadingElement =
@@ -1067,133 +948,93 @@ function showError(message) {
 }
 
 
-/* ================= BOOK CARD ================= */
-
-function renderBookCard(article) {
-  const articleSlug =
-    encodeURIComponent(article.slug);
-
-  const placeholder =
-    getPlaceholderCover('Tidak ada cover');
-
-  const coverUrl =
-    article.cover || placeholder;
-
-  const tags = article.tags
-    .map(tag => tagButton(tag))
-    .join('');
+function renderBookGrid(articles) {
+  const placeholder = getPlaceholderImage();
 
   return `
-    <article class="book-card">
-      <a
-        class="book-card-link"
-        href="#/artikel/${articleSlug}"
-        aria-label="Buka buku ${escapeAttribute(article.title)}">
+    <div class="book-image-grid">
+      ${articles
+        .map(article => {
+          const articleSlug =
+            encodeURIComponent(article.slug);
 
-        <div class="book-cover-wrapper">
-          <img
-            class="book-cover"
-            src="${escapeAttribute(coverUrl)}"
-            alt="Cover ${escapeAttribute(article.title)}"
-            loading="lazy"
-            onerror="this.onerror=null;this.src='${placeholder}';">
+          const imageUrl =
+            article.cover || placeholder;
 
-          <div class="book-overlay">
-            Buka buku
-          </div>
-        </div>
+          return `
+            <a
+              class="book-image-link"
+              href="#/artikel/${articleSlug}"
+              title="${escapeAttribute(article.title)}"
+              aria-label="Buka ${escapeAttribute(article.title)}">
 
-        <div class="book-info">
-          <h2 class="book-title">
-            ${escapeHtml(article.title)}
-          </h2>
-
-          ${
-            article.author
-              ? `
-                <div class="book-author">
-                  ${escapeHtml(article.author)}
-                </div>
-              `
-              : ''
-          }
-
-          <div class="book-meta">
-            ${escapeHtml(
-              article.date || 'tanpa tanggal'
-            )}
-          </div>
-        </div>
-      </a>
-
-      <div class="book-tags">
-        ${tags}
-      </div>
-    </article>
+              <img
+                class="book-image"
+                src="${escapeAttribute(imageUrl)}"
+                alt="${escapeAttribute(article.title)}"
+                loading="lazy"
+                onerror="this.onerror=null;this.src='${placeholder}';">
+            </a>
+          `;
+        })
+        .join('')}
+    </div>
   `;
 }
 
 
-/* ================= RENDER LIST ================= */
-
 function renderList() {
   document.title = SITE_TITLE;
 
-  /*
-   * Hanya dua tab.
-   */
-  const layouts = [
-    'post',
-    'book'
-  ];
-
-  const layoutLabels = {
-    post: '📝 Blog',
-    book: '📖 Buku'
-  };
-
-  const activeTagInfo = currentTag
-    ? `
-      <div class="active-filter">
-        <span>Menampilkan tag:</span>
-
-        <button
-          type="button"
-          class="active-tag"
-          data-action="clear-tag">
-          ${escapeHtml(currentTag)}
-        </button>
-
-        <button
-          type="button"
-          class="clear-filter"
-          data-action="clear-tag"
-          title="Hapus filter tag">
-          ×
-        </button>
-      </div>
-    `
-    : '';
-
   app.innerHTML = `
     <div class="tabs">
-      ${layouts
-        .map(layout => `
-          <button
-            type="button"
-            class="tab-btn ${
-              currentLayout === layout
-                ? 'active'
-                : ''
-            }"
-            data-layout="${layout}">
-            ${layoutLabels[layout]}
-          </button>
-        `)
-        .join('')}
+      <button
+        type="button"
+        class="tab-btn ${
+          currentLayout === 'post'
+            ? 'active'
+            : ''
+        }"
+        data-layout="post">
+        📝 Blog
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn ${
+          currentLayout === 'book'
+            ? 'active'
+            : ''
+        }"
+        data-layout="book">
+        📖 Buku
+      </button>
     </div>
 
-    ${activeTagInfo}
+    ${
+      currentTag
+        ? `
+          <div class="active-filter">
+            <span>Menampilkan tag:</span>
+
+            <button
+              type="button"
+              class="active-tag"
+              data-action="clear-tag">
+              ${escapeHtml(currentTag)}
+            </button>
+
+            <button
+              type="button"
+              class="clear-filter"
+              data-action="clear-tag"
+              title="Hapus filter tag">
+              ×
+            </button>
+          </div>
+        `
+        : ''
+    }
 
     <input
       id="q"
@@ -1217,18 +1058,12 @@ function renderList() {
 
     const filteredArticles = ARTICLES.filter(
       article => {
-        /*
-         * Layout hanya post atau book.
-         */
         if (
           article.layout !== currentLayout
         ) {
           return false;
         }
 
-        /*
-         * Filter tag.
-         */
         if (
           selectedTag &&
           !article.tags.some(tag => {
@@ -1238,9 +1073,6 @@ function renderList() {
           return false;
         }
 
-        /*
-         * Filter pencarian.
-         */
         if (!query) {
           return true;
         }
@@ -1267,26 +1099,13 @@ function renderList() {
       return;
     }
 
-    /*
-     * Tab Buku menampilkan grid cover.
-     */
     if (currentLayout === 'book') {
-      listElement.innerHTML = `
-        <div class="books-grid">
-          ${filteredArticles
-            .map(article => {
-              return renderBookCard(article);
-            })
-            .join('')}
-        </div>
-      `;
+      listElement.innerHTML =
+        renderBookGrid(filteredArticles);
 
       return;
     }
 
-    /*
-     * Tab Blog menampilkan daftar artikel.
-     */
     listElement.innerHTML = filteredArticles
       .map(article => {
         const articleSlug =
@@ -1327,9 +1146,6 @@ function renderList() {
       .join('');
   }
 
-  /*
-   * Tombol tab Blog dan Buku.
-   */
   document
     .querySelectorAll('.tab-btn')
     .forEach(button => {
@@ -1343,9 +1159,6 @@ function renderList() {
       });
     });
 
-  /*
-   * Klik tag pada daftar.
-   */
   listElement.addEventListener(
     'click',
     event => {
@@ -1365,9 +1178,6 @@ function renderList() {
     }
   );
 
-  /*
-   * Hapus filter tag.
-   */
   document
     .querySelectorAll('[data-action="clear-tag"]')
     .forEach(button => {
@@ -1376,9 +1186,6 @@ function renderList() {
       });
     });
 
-  /*
-   * Pencarian artikel.
-   */
   let searchTimeout;
 
   const searchElement =
@@ -1399,8 +1206,6 @@ function renderList() {
   drawList();
 }
 
-
-/* ================= DETAIL ARTIKEL ================= */
 
 function renderArticle(slug) {
   const article = ARTICLES.find(
@@ -1481,9 +1286,6 @@ function renderArticle(slug) {
     </article>
   `;
 
-  /*
-   * Tag pada halaman detail.
-   */
   document
     .querySelectorAll('.tag-button')
     .forEach(button => {
@@ -1503,8 +1305,6 @@ function renderArticle(slug) {
 }
 
 
-/* ================= ROUTER ================= */
-
 function route() {
   const match = (
     location.hash || '#/'
@@ -1519,8 +1319,6 @@ function route() {
   }
 }
 
-
-/* ================= EVENT GLOBAL ================= */
 
 window.addEventListener(
   'hashchange',
