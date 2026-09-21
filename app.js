@@ -872,14 +872,16 @@ async function load() {
     ARTICLES = parseOrg(cleanText);
 
     ARTICLES.sort((first, second) => {
-      const firstDate =
-        first.date || '9999-12-31';
+  const firstTime = first.date
+    ? new Date(first.date).getTime()
+    : 0;
 
-      const secondDate =
-        second.date || '9999-12-31';
+  const secondTime = second.date
+    ? new Date(second.date).getTime()
+    : 0;
 
-      return firstDate.localeCompare(secondDate);
-    });
+  return secondTime - firstTime;
+});
 
     if (!ARTICLES.length) {
       showError(
