@@ -1,7 +1,7 @@
 /* ================= KONFIG ================= */
 // GANTI URL INI DENGAN URL YANG ANDA DAPATKAN DARI LANGKAH DI ATAS
 // (URL YANG BERHASIL MENDOWNLOAD FILE SAAT DITEMPEL DI BROWSER)
-const TARGET_URL = 'https://drive.jogjakota.go.id/s/YZmpJtJnAxPbfAW/download/artikel.org'; 
+const TARGET_URL = 'https://artikel-proxy.extra03-mine.workers.dev/'; 
 // ATAU JIKA SHARE FOLDER: 'https://mydrive.id/s/YZmpJtJnAxPbfAW/download?path=%2F&files=artikel.org'
 
 const SITE_TITLE = 'Blog Saya';
