@@ -12,7 +12,7 @@ const app = document.getElementById('app');
 const SITE_TITLE =
   typeof window.SITE_TITLE !== 'undefined'
     ? window.SITE_TITLE
-    : 'Blog Saya';
+    : 'Blog Udin';
 
 
 /* =========================================================
