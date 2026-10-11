@@ -602,7 +602,38 @@ function renderInline(input) {
       `);
     }
   );
+  
+  /*
+   * Video.
+   */
+  source = source.replace(
+    /\[\[video:([^\]]+)\]\[([^\]]*)\]\]/gi,
+    function (_, url, text) {
+      const videoUrl = safeUrl(url);
 
+      return protect(`
+        <div class="video-player">
+          <video
+            controls
+            preload="metadata"
+            style="width:100%;">
+            <source
+              src="${videoUrl}"
+              type="video/mp4">
+
+            Browser tidak mendukung video.
+
+            <a
+              href="${videoUrl}"
+              target="_blank"
+              rel="noopener">
+              ${safeText(text || 'Tonton video')}
+            </a>
+          </video>
+        </div>
+      `);
+    }
+  );
   /*
    * Link atau gambar dengan deskripsi.
    */
