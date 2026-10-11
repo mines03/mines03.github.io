@@ -615,6 +615,7 @@ function renderInline(input) {
         <div class="video-player">
           <video
             controls
+            loop
             preload="metadata"
             style="width:100%;">
             <source
